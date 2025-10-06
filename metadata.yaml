@@ -1,5 +1,5 @@
 name: astrbot_plugin_napdog_cleaner
 desc: napdog, 把napcat拉的史全部吃光光, 定期清理 napcat 缓存, 可配置清理阈值, 路径, 间隔
-version: v1.0
+version: v1.1
 author: anka
 repo: https://github.com/Soulter/astrbot_plugin_napdog_cleaner
