@@ -5,10 +5,10 @@
     "hint": "清理 napcat 缓存的大小阈值, 超过这个阈值就会触发清理 单位: MB",
     "default": 100
   },
-  "napcat_cache_dir": {
-    "type": "string",
-    "description": "napcat 缓存目录绝对路径",
-    "hint": "napcat 缓存目录绝对路径",
+  "napcat_cache_dirs": {
+    "type": "text",
+    "description": "napcat 缓存目录绝对路径（支持多个目录，每行一个）",
+    "hint": "napcat 缓存目录绝对路径（支持多个目录，每行一个）",
     "default": "/root/.config/QQ/NapCat/temp"
   },
   "cleanup_interval": {

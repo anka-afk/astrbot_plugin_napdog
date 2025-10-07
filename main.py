@@ -17,17 +17,23 @@ class NapDog(Star):
         self.clean_size = config.get("clean_size", 100)
         self.cleanup_interval = config.get("cleanup_interval", 3600)
         self.cleaning_task = None
+        self.napcat_cache_dirs = []
 
     async def initialize(self):
         """实例化插件类后, 注册清理的异步任务"""
         # 检查环境
-        in_docker = self.is_docker()
-        default_path = "/napcat-cache" if in_docker else "/root/.config/QQ/NapCat/temp"
-        self.napcat_cache_dir = self.config.get("napcat_cache_dir", default_path)
+        in_docker = await self.is_docker()
+        default_path_text = "/napcat-cache" if in_docker else "/root/.config/QQ/NapCat/temp"
+        
+        cache_dirs_text = self.config.get("napcat_cache_dirs", default_path_text)
+        self.napcat_cache_dirs = [
+            d.strip() for d in cache_dirs_text.splitlines() if d.strip()
+        ]
 
         self.cleaning_task = asyncio.create_task(self.schedule_cleaning())
+        # 日志中显示所有监控的目录
         logger.info(
-            f"[napdog] napdog插件已加载, 清理路径: {self.napcat_cache_dir}, 清理阈值: {self.clean_size}MB, 清理间隔: {self.cleanup_interval}s"
+            f"[napdog] napdog插件已加载, 监控目录: {self.napcat_cache_dirs}, 清理阈值: {self.clean_size}MB, 清理间隔: {self.cleanup_interval}s"
         )
 
     async def is_docker(self):
@@ -71,15 +77,13 @@ class NapDog(Star):
 
         return False
 
-    async def get_napcat_cache_size(self):
+    async def get_dir_size_mb(self, path):
         """
-        获取napcat缓存的大小
+        获取指定目录的大小
 
         Returns:
-            float: napcat缓存的大小, 单位MB
+            float: 目录的大小, 单位MB
         """
-
-        # 获取napcat缓存目录的大小
         def get_dir_size(path):
             total_size = 0
             for dirpath, dirnames, filenames in os.walk(path):
@@ -90,33 +94,37 @@ class NapDog(Star):
 
             return total_size / (1024 * 1024)
 
-        if not os.path.exists(self.napcat_cache_dir):
-            logger.warning(f"[napdog] 不存在的napcat缓存目录: {self.napcat_cache_dir}")
+        if not os.path.exists(path):
+            logger.warning(f"[napdog] 不存在的目录: {path}")
             return 0
 
-        return get_dir_size(self.napcat_cache_dir)
+        return get_dir_size(path)
 
     async def clean_napcat(self):
         """一个异步任务, 专门清理napcat的史"""
-        # 检查默认路径下, napcat缓存的大小, 如果大于限制, 则删除
-        napcat_cache_size = await self.get_napcat_cache_size()
+        
+        # 遍历所有配置的缓存目录
+        for cache_dir in self.napcat_cache_dirs:
+            # 使用新的单目录大小获取方法
+            napcat_cache_size = await self.get_dir_size_mb(cache_dir)
 
-        if napcat_cache_size > self.clean_size:
-            logger.info(
-                f"[napdog] napcat缓存大小: {napcat_cache_size}MB, 超过限制, 开始清理"
-            )
-            try:
-                shutil.rmtree(self.napcat_cache_dir)
-                logger.info(f"[napdog] 清理成功, 删除了{self.napcat_cache_dir}")
-            except Exception as e:
-                logger.error(f"[napdog] 清理失败: {e}")
-        else:
-            logger.info(
-                f"[napdog] napcat缓存大小: {napcat_cache_size}MB, 未超过限制, 不需要清理"
-            )
-            return
-
-        os.makedirs(self.napcat_cache_dir, exist_ok=True)
+            if napcat_cache_size > self.clean_size:
+                logger.info(
+                    f"[napdog] 目录 {cache_dir} 缓存大小: {napcat_cache_size:.2f}MB, 超过限制 ({self.clean_size}MB), 开始清理"
+                )
+                try:
+                    # 尝试删除整个目录
+                    shutil.rmtree(cache_dir)
+                    logger.info(f"[napdog] 目录 {cache_dir} 清理成功")
+                except Exception as e:
+                    logger.error(f"[napdog] 目录 {cache_dir} 清理失败: {e}")
+                
+                # 无论是否清理成功，都重新创建目录以供 NapCat 重新使用
+                os.makedirs(cache_dir, exist_ok=True)
+            else:
+                logger.info(
+                    f"[napdog] 目录 {cache_dir} 缓存大小: {napcat_cache_size:.2f}MB, 未超过限制 ({self.clean_size}MB), 不需要清理"
+                )
 
     async def schedule_cleaning(self):
         """定时清理napcat缓存的异步任务"""
